@@ -227,4 +227,16 @@ try:
     
     if not final_df.empty:
         display_df = final_df.rename(columns={
-            "GARMENT":
+            "GARMENT": lbl_garment, "POSITION": lbl_pos, "OPERATION": lbl_op,
+            "MACHINE": lbl_mach, "TIME": lbl_time, "CATEGORY": lbl_cat
+        })
+        
+        cols_order = [lbl_garment, lbl_pos, lbl_op, lbl_mach, lbl_time, lbl_cat]
+        
+        st.dataframe(display_df[cols_order], use_container_width=True, hide_index=True)
+        st.caption(f"{t_results_msg}: {len(final_df)}")
+    else:
+        st.info(t_no_results)
+
+except Exception as e:
+    st.error(f"An error occurred: {e}")
