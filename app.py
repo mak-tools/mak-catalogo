@@ -99,9 +99,9 @@ def load_data(language):
 
     return pd.DataFrame(extracted_data), col_map
 
-# --- 3. UI LAYOUT & TRANSLATIONS ---
+# --- 3. UI LAYOUT & STATE MANAGEMENT ---
 
-# Initialize session state for language
+# Initialize session state for language SOURCE OF TRUTH
 if "lang_choice" not in st.session_state:
     st.session_state.lang_choice = "English"
 
@@ -126,6 +126,7 @@ def format_language_option(option):
     else:
         return option
 
+# --- HEADER LAYOUT ---
 col_header_1, col_header_2 = st.columns([5, 1])
 
 with col_header_1:
@@ -133,20 +134,19 @@ with col_header_1:
     st.markdown(f"#### {t_header}")
 
 with col_header_2:
-    # --- CALLBACK FUNCTION (THE FIX) ---
+    # CALLBACK: Updates the Source of Truth immediately
     def update_language():
-        # This function runs immediately when the button is clicked
         st.session_state.lang_choice = st.session_state.ui_lang_radio
 
-    # Calculate index to FORCE the button to stay where it should be
-    current_index = 0 if st.session_state.lang_choice == "English" else 1
+    # Force the index based on the saved state
+    current_idx = 0 if st.session_state.lang_choice == "English" else 1
 
     st.radio(
         label=t_label,
         options=["English", "Spanish"],
-        index=current_index,      # <--- Forces correct selection
-        key="ui_lang_radio",      # <--- Unique key for the widget
-        on_change=update_language,# <--- triggers the update immediately
+        index=current_idx,         # Forces the button to visually match memory
+        key="ui_lang_radio",       # Unique ID for the widget
+        on_change=update_language, # Runs function when clicked
         horizontal=True, 
         format_func=format_language_option
     )
@@ -155,6 +155,7 @@ st.markdown("---")
 
 # --- 4. FILTERING LOGIC ---
 try:
+    # Load data based on the PERSISTENT state
     df, col_map = load_data(st.session_state.lang_choice)
     
     if df.empty:
@@ -168,12 +169,13 @@ try:
     lbl_mach = col_map[4]
     lbl_time = col_map[5]
 
-    # --- RESET CALLBACK ---
+    # --- RESET CALLBACK (FIXED) ---
     def reset_filters():
-        st.session_state.cat_key = "All"
-        st.session_state.garment_key = "All"
-        st.session_state.pos_key = "All"
-        st.session_state.op_key = "All"
+        # Only reset the dropdown keys. Do NOT touch lang_choice or ui_lang_radio.
+        if "cat_key" in st.session_state: st.session_state.cat_key = "All"
+        if "garment_key" in st.session_state: st.session_state.garment_key = "All"
+        if "pos_key" in st.session_state: st.session_state.pos_key = "All"
+        if "op_key" in st.session_state: st.session_state.op_key = "All"
 
     def get_sorted_options(dataframe, col_key):
         return ["All"] + sorted([x for x in dataframe[col_key].unique() if x != ""])
