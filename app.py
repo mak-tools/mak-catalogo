@@ -100,11 +100,12 @@ def load_data(language):
     return pd.DataFrame(extracted_data), col_map
 
 # --- 3. UI LAYOUT & TRANSLATIONS ---
-# Initialize session state for language if not exists to keep UI stable
+
+# Initialize session state
 if "lang_choice" not in st.session_state:
     st.session_state.lang_choice = "English"
 
-# Define Text based on current state (before rendering)
+# Define Text Variables
 if st.session_state.lang_choice == "English":
     t_header = "CATALOGUE OF TIMES"
     t_label = "LANGUAGE"
@@ -118,17 +119,28 @@ else:
     t_results_msg = "Resultados"
     t_no_results = "No se encontraron resultados"
 
+# Helper function to display the options correctly
+def format_language_option(option):
+    if st.session_state.lang_choice == "Spanish":
+        return "Inglés" if option == "English" else "Español"
+    else:
+        return option
+
 col_header_1, col_header_2 = st.columns([5, 1])
 
 with col_header_1:
     st.markdown("## **MAK**") 
-    # DYNAMIC HEADER
     st.markdown(f"#### {t_header}")
 
 with col_header_2:
-    # DYNAMIC LABEL
-    # We use 'key' to sync with session_state automatically
-    language = st.radio(t_label, ["English", "Spanish"], horizontal=True, key="lang_choice")
+    # Use format_func to change how the options look without breaking the logic
+    language = st.radio(
+        t_label, 
+        ["English", "Spanish"], 
+        horizontal=True, 
+        key="lang_choice",
+        format_func=format_language_option
+    )
 
 st.markdown("---")
 
