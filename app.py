@@ -124,7 +124,7 @@ try:
     lbl_mach = col_map[4]
     lbl_time = col_map[5]
 
-    # --- RESET CALLBACK FUNCTION ---
+    # --- RESET CALLBACK ---
     def reset_filters():
         st.session_state.cat_key = "All"
         st.session_state.garment_key = "All"
@@ -135,20 +135,12 @@ try:
         return ["All"] + sorted([x for x in dataframe[col_key].unique() if x != ""])
 
     with st.container():
-        # UPDATED: 5 Columns -> First one is small (index 1) for the button
-        c_reset, c1, c2, c3, c4 = st.columns([1, 3, 3, 3, 3])
-        
-        # 0. RESET BUTTON
-        with c_reset:
-            # Add some spacing so it aligns with the dropdowns
-            st.write("") 
-            st.write("") 
-            st.button("🔄 Clear", on_click=reset_filters)
+        # UPDATED: Button is now the LAST column
+        c1, c2, c3, c4, c_reset = st.columns([3, 3, 3, 3, 1])
 
         # 1. CATEGORY
         with c1:
             cat_opts = get_sorted_options(df, "CATEGORY")
-            # Added key='cat_key'
             sel_cat = st.selectbox(lbl_cat, cat_opts, key="cat_key")
         
         if sel_cat != "All":
@@ -159,7 +151,6 @@ try:
         # 2. GARMENT
         with c2:
             garment_opts = get_sorted_options(df_step1, "GARMENT")
-            # Added key='garment_key'
             sel_garment = st.selectbox(lbl_garment, garment_opts, key="garment_key")
 
         if sel_garment != "All":
@@ -170,7 +161,6 @@ try:
         # 3. POSITION
         with c3:
             pos_opts = get_sorted_options(df_step2, "POSITION")
-            # Added key='pos_key'
             sel_pos = st.selectbox(lbl_pos, pos_opts, key="pos_key")
 
         if sel_pos != "All":
@@ -181,13 +171,19 @@ try:
         # 4. OPERATION
         with c4:
             op_opts = get_sorted_options(df_step3, "OPERATION")
-            # Added key='op_key'
             sel_op = st.selectbox(lbl_op, op_opts, key="op_key")
 
         if sel_op != "All":
             final_df = df_step3[df_step3["OPERATION"] == sel_op]
         else:
             final_df = df_step3
+            
+        # 5. RESET BUTTON (RIGHT SIDE)
+        with c_reset:
+            # These two lines push the button down to align with the inputs
+            st.write("") 
+            st.write("") 
+            st.button("🔄 Clear", on_click=reset_filters)
 
     # --- 5. DISPLAY RESULTS ---
     st.divider()
