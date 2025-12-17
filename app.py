@@ -105,7 +105,7 @@ def load_data(language):
 if "lang_choice" not in st.session_state:
     st.session_state.lang_choice = "English"
 
-# Define Text Variables
+# Define Text Variables based on CURRENT state
 if st.session_state.lang_choice == "English":
     t_header = "CATALOGUE OF TIMES"
     t_label = "LANGUAGE"
@@ -119,7 +119,7 @@ else:
     t_results_msg = "Resultados"
     t_no_results = "No se encontraron resultados"
 
-# Helper function to display the options correctly
+# Helper for the display text
 def format_language_option(option):
     if st.session_state.lang_choice == "Spanish":
         return "Inglés" if option == "English" else "Español"
@@ -133,20 +133,29 @@ with col_header_1:
     st.markdown(f"#### {t_header}")
 
 with col_header_2:
-    # Use format_func to change how the options look without breaking the logic
-    language = st.radio(
+    # --- STABLE RADIO BUTTON LOGIC ---
+    # We calculate the index manually to force the button to stay put
+    current_index = 0 if st.session_state.lang_choice == "English" else 1
+    
+    selected_lang = st.radio(
         t_label, 
         ["English", "Spanish"], 
+        index=current_index,
         horizontal=True, 
-        key="lang_choice",
         format_func=format_language_option
     )
+
+    # Manual State Update: If the user clicked a new button, update and RERUN immediately.
+    if selected_lang != st.session_state.lang_choice:
+        st.session_state.lang_choice = selected_lang
+        st.rerun()
 
 st.markdown("---")
 
 # --- 4. FILTERING LOGIC ---
+# Use the session_state directly for the data loader
 try:
-    df, col_map = load_data(language)
+    df, col_map = load_data(st.session_state.lang_choice)
     
     if df.empty:
         st.warning("No data found.")
