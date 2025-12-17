@@ -37,11 +37,8 @@ def load_data(language):
     # --- CONNECT TO SHEET ---
     try:
         client = gspread.authorize(creds)
-        
-        # KEY for the new spreadsheet
         sheet_key = "1Hd-NGFEKJudVRcinsnN7G8LUrtWg6bdk9xACs0tm_kc"
         sh = client.open_by_key(sheet_key) 
-        
     except Exception as e:
         st.error(f"❌ Connection Error: {e}")
         return pd.DataFrame(), {}
@@ -90,14 +87,17 @@ def load_data(language):
     for row in data_rows:
         if len(row) > 6:
             item = {
-                "GARMENT": row[1], "POSITION": row[2], "OPERATION": row[3],
-                "MACHINE": row[4], "TIME": row[5], "CATEGORY": row[6]
+                "GARMENT": row[1].strip(), 
+                "POSITION": row[2].strip(), 
+                "OPERATION": row[3].strip(),
+                "MACHINE": row[4].strip(), 
+                "TIME": row[5].strip(), 
+                "CATEGORY": row[6].strip()
             }
-            if item["GARMENT"].strip() != "" or item["OPERATION"].strip() != "":
+            if item["GARMENT"] != "" or item["OPERATION"] != "":
                 extracted_data.append(item)
 
     return pd.DataFrame(extracted_data), col_map
-
 
 # --- 3. UI LAYOUT ---
 col_header_1, col_header_2 = st.columns([5, 1])
@@ -124,18 +124,33 @@ try:
     lbl_mach = col_map[4]
     lbl_time = col_map[5]
 
+    # --- RESET CALLBACK FUNCTION ---
+    def reset_filters():
+        st.session_state.cat_key = "All"
+        st.session_state.garment_key = "All"
+        st.session_state.pos_key = "All"
+        st.session_state.op_key = "All"
+
     def get_sorted_options(dataframe, col_key):
-        return ["All"] + sorted([x for x in dataframe[col_key].unique() if x.strip() != ""])
+        return ["All"] + sorted([x for x in dataframe[col_key].unique() if x != ""])
 
     with st.container():
-        c1, c2, c3, c4 = st.columns(4)
+        # UPDATED: 5 Columns -> First one is small (index 1) for the button
+        c_reset, c1, c2, c3, c4 = st.columns([1, 3, 3, 3, 3])
+        
+        # 0. RESET BUTTON
+        with c_reset:
+            # Add some spacing so it aligns with the dropdowns
+            st.write("") 
+            st.write("") 
+            st.button("🔄 Clear", on_click=reset_filters)
 
         # 1. CATEGORY
         with c1:
             cat_opts = get_sorted_options(df, "CATEGORY")
-            sel_cat = st.selectbox(lbl_cat, cat_opts)
+            # Added key='cat_key'
+            sel_cat = st.selectbox(lbl_cat, cat_opts, key="cat_key")
         
-        # FIX: Use exact match (==) instead of .str.contains()
         if sel_cat != "All":
             df_step1 = df[df["CATEGORY"] == sel_cat]
         else:
@@ -144,9 +159,9 @@ try:
         # 2. GARMENT
         with c2:
             garment_opts = get_sorted_options(df_step1, "GARMENT")
-            sel_garment = st.selectbox(lbl_garment, garment_opts)
+            # Added key='garment_key'
+            sel_garment = st.selectbox(lbl_garment, garment_opts, key="garment_key")
 
-        # FIX: Use exact match (==)
         if sel_garment != "All":
             df_step2 = df_step1[df_step1["GARMENT"] == sel_garment]
         else:
@@ -155,9 +170,9 @@ try:
         # 3. POSITION
         with c3:
             pos_opts = get_sorted_options(df_step2, "POSITION")
-            sel_pos = st.selectbox(lbl_pos, pos_opts)
+            # Added key='pos_key'
+            sel_pos = st.selectbox(lbl_pos, pos_opts, key="pos_key")
 
-        # FIX: Use exact match (==)
         if sel_pos != "All":
             df_step3 = df_step2[df_step2["POSITION"] == sel_pos]
         else:
@@ -166,9 +181,9 @@ try:
         # 4. OPERATION
         with c4:
             op_opts = get_sorted_options(df_step3, "OPERATION")
-            sel_op = st.selectbox(lbl_op, op_opts)
+            # Added key='op_key'
+            sel_op = st.selectbox(lbl_op, op_opts, key="op_key")
 
-        # FIX: Use exact match (==)
         if sel_op != "All":
             final_df = df_step3[df_step3["OPERATION"] == sel_op]
         else:
