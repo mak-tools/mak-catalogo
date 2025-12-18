@@ -3,7 +3,6 @@ import gspread
 from oauth2client.service_account import ServiceAccountCredentials
 import pandas as pd
 import os
-from fpdf import FPDF  # <--- NEW IMPORT FOR PDF
 
 # --- 1. CONFIGURATION ---
 st.set_page_config(page_title="MAK - CATALOGO", layout="wide")
@@ -112,20 +111,16 @@ if st.session_state.lang_choice == "English":
     t_clear_btn = "🔄 Clear"
     t_results_msg = "Results"
     t_no_results = "No Results Found"
-    t_download_csv = "Download CSV"
-    t_download_pdf = "Download PDF"
-    t_filename_csv = "results.csv"
-    t_filename_pdf = "spec_sheet.pdf"
+    t_download_btn = "Download CSV"
+    t_filename = "results.csv"
 else:
     t_header = "CATALOGO DE TIEMPOS"
     t_label = "IDIOMA"
     t_clear_btn = "🔄 Limpiar"
     t_results_msg = "Resultados"
     t_no_results = "No se encontraron resultados"
-    t_download_csv = "Descargar CSV"
-    t_download_pdf = "Descargar PDF"
-    t_filename_csv = "resultados.csv"
-    t_filename_pdf = "hoja_especificaciones.pdf"
+    t_download_btn = "Descargar CSV"
+    t_filename = "resultados.csv"
 
 def format_language_option(option):
     if st.session_state.lang_choice == "Spanish":
@@ -222,83 +217,32 @@ try:
     final_mask = m_cat & m_garment & m_pos & m_op
     final_df = df[final_mask]
 
-    # --- 5. PDF GENERATOR FUNCTION ---
-    def create_pdf(dataframe, headers):
-        pdf = FPDF(orientation='L', unit='mm', format='A4') # Landscape
-        pdf.add_page()
-        
-        # Title
-        pdf.set_font("Arial", "B", 16)
-        pdf.cell(0, 10, f"MAK - {t_header}", ln=True, align="C")
-        pdf.ln(10)
-
-        # Headers
-        pdf.set_font("Arial", "B", 10)
-        # Column Order: Garment, Position, Operation, Machine, Time, Category
-        col_names = [headers[0], headers[1], headers[2], headers[3], headers[4], headers[5]]
-        widths = [45, 45, 90, 30, 25, 40] # Total approx 275mm (A4 landscape is 297mm)
-        
-        for i, h in enumerate(col_names):
-            # Encode to latin-1 to handle Spanish accents
-            txt = str(h).encode('latin-1', 'replace').decode('latin-1')
-            pdf.cell(widths[i], 10, txt, border=1, align='C', fill=False)
-        pdf.ln()
-
-        # Rows
-        pdf.set_font("Arial", "", 9)
-        for _, row in dataframe.iterrows():
-            data = [
-                row[headers[0]], row[headers[1]], row[headers[2]], 
-                row[headers[3]], row[headers[4]], row[headers[5]]
-            ]
-            
-            # Draw Cells
-            max_height = 10
-            for i, d in enumerate(data):
-                txt = str(d).encode('latin-1', 'replace').decode('latin-1')
-                pdf.cell(widths[i], max_height, txt, border=1)
-            pdf.ln()
-            
-        return pdf.output(dest='S').encode('latin-1') # Return as bytes
-
-    # --- 6. DISPLAY RESULTS & DOWNLOADS ---
+    # --- 5. DISPLAY RESULTS & DOWNLOAD ---
     st.divider()
     
     if not final_df.empty:
-        # Prepare Display DataFrame
+        # Rename columns for Display AND Download
         display_df = final_df.rename(columns={
             "GARMENT": lbl_garment, "POSITION": lbl_pos, "OPERATION": lbl_op,
             "MACHINE": lbl_mach, "TIME": lbl_time, "CATEGORY": lbl_cat
         })
         
         cols_order = [lbl_garment, lbl_pos, lbl_op, lbl_mach, lbl_time, lbl_cat]
-        display_df = display_df[cols_order]
+        display_df = display_df[cols_order] # Reorder columns
         
         st.dataframe(display_df, use_container_width=True, hide_index=True)
         st.caption(f"{t_results_msg}: {len(final_df)}")
 
-        # --- DOWNLOAD BUTTONS ---
-        col_d1, col_d2, col_spacer = st.columns([1, 1, 4])
-        
-        # 1. CSV
+        # --- DOWNLOAD BUTTON ---
+        # Convert DF to CSV
         csv = display_df.to_csv(index=False).encode('utf-8')
-        with col_d1:
-            st.download_button(
-                label=f"📥 {t_download_csv}",
-                data=csv,
-                file_name=t_filename_csv,
-                mime='text/csv',
-            )
 
-        # 2. PDF
-        with col_d2:
-            pdf_bytes = create_pdf(display_df, cols_order)
-            st.download_button(
-                label=f"📄 {t_download_pdf}",
-                data=pdf_bytes,
-                file_name=t_filename_pdf,
-                mime='application/pdf',
-            )
+        st.download_button(
+            label=f"📥 {t_download_btn}",
+            data=csv,
+            file_name=t_filename,
+            mime='text/csv',
+        )
 
     else:
         st.info(t_no_results)
