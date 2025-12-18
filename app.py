@@ -158,7 +158,7 @@ with col_header_2:
 
 st.markdown("---")
 
-# --- 4. SMART FILTERING (NO RESET LOGIC) ---
+# --- 4. SAFE SMART FILTERING ---
 try:
     df, col_map = load_data(st.session_state.lang_choice)
     
@@ -184,31 +184,38 @@ try:
     sel_pos = st.session_state.get("pos_key", "All")
     sel_op = st.session_state.get("op_key", "All")
 
-    # --- MASKS ---
-    m_cat = (df["CATEGORY"] == sel_cat) if sel_cat != "All" else pd.Series([True] * len(df))
-    m_garment = (df["GARMENT"] == sel_garment) if sel_garment != "All" else pd.Series([True] * len(df))
-    m_pos = (df["POSITION"] == sel_pos) if sel_pos != "All" else pd.Series([True] * len(df))
-    m_op = (df["OPERATION"] == sel_op) if sel_op != "All" else pd.Series([True] * len(df))
+    # --- ROBUST MASK CREATION ---
+    # We use index alignment to prevent crashes or resets on empty results
+    m_all = pd.Series(True, index=df.index)
 
-    # --- FORCE KEEP LOGIC ---
-    # This function calculates valid options BUT always includes the current selection
-    # to prevent the "Reset" behavior you disliked.
-    def get_smart_options(df_source, col_name, current_val):
-        # 1. Get valid options from data
-        valid_opts = sorted([x for x in df_source[col_name].unique() if x != ""])
+    m_cat = (df["CATEGORY"] == sel_cat) if sel_cat != "All" else m_all
+    m_garment = (df["GARMENT"] == sel_garment) if sel_garment != "All" else m_all
+    m_pos = (df["POSITION"] == sel_pos) if sel_pos != "All" else m_all
+    m_op = (df["OPERATION"] == sel_op) if sel_op != "All" else m_all
+
+    # --- FORCE PERSISTENCE FUNCTION ---
+    # This logic calculates the valid "Smart" options but FORCEFULLY adds back
+    # the user's current selection so the dropdown NEVER resets.
+    def get_safe_options(df_source, col_name, current_val):
+        # 1. Get raw unique options from the filtered data
+        valid_opts = set(df_source[col_name].unique())
         
-        # 2. If the current user selection is missing (because of a conflict), ADD IT BACK.
-        # This keeps the dropdown stable even if the table shows "No Results".
-        if current_val != "All" and current_val not in valid_opts:
-            valid_opts.append(current_val)
+        # 2. Remove empty strings
+        if "" in valid_opts: valid_opts.remove("")
+        
+        # 3. CRITICAL: Add the current user selection back into the set
+        # This ensures the widget always finds its "index" and doesn't reset to "All"
+        if current_val != "All":
+            valid_opts.add(current_val)
             
-        return ["All"] + sorted(valid_opts)
+        return ["All"] + sorted(list(valid_opts))
 
-    # Calculate Options (Intersection Logic)
-    avail_cat = get_smart_options(df[m_garment & m_pos & m_op], "CATEGORY", sel_cat)
-    avail_garment = get_smart_options(df[m_cat & m_pos & m_op], "GARMENT", sel_garment)
-    avail_pos = get_smart_options(df[m_cat & m_garment & m_op], "POSITION", sel_pos)
-    avail_op = get_smart_options(df[m_cat & m_garment & m_pos], "OPERATION", sel_op)
+    # --- CALCULATE DROPDOWN LISTS ---
+    # Cross-filtering logic: The options for 'Category' are determined by (Garment + Position + Operation)
+    avail_cat = get_safe_options(df[m_garment & m_pos & m_op], "CATEGORY", sel_cat)
+    avail_garment = get_safe_options(df[m_cat & m_pos & m_op], "GARMENT", sel_garment)
+    avail_pos = get_safe_options(df[m_cat & m_garment & m_op], "POSITION", sel_pos)
+    avail_op = get_safe_options(df[m_cat & m_garment & m_pos], "OPERATION", sel_op)
 
     with st.container():
         c1, c2, c3, c4, c_reset = st.columns([3, 3, 3, 3, 1])
@@ -295,7 +302,7 @@ try:
                 use_container_width=True
             )
             
-            # 2. PDF (Stacked)
+            # 2. PDF
             pdf_bytes = create_pdf(display_df, cols_order)
             st.download_button(
                 label=f"📄 {t_download_pdf}",
@@ -304,7 +311,6 @@ try:
                 mime='application/pdf',
                 use_container_width=True
             )
-
     else:
         st.info(t_no_results)
 
