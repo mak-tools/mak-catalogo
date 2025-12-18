@@ -4,7 +4,6 @@ from oauth2client.service_account import ServiceAccountCredentials
 import pandas as pd
 import os
 from fpdf import FPDF
-import altair as alt
 
 # --- 1. CONFIGURATION ---
 st.set_page_config(page_title="MAK - CATALOGO", layout="wide")
@@ -117,12 +116,6 @@ if st.session_state.lang_choice == "English":
     t_download_pdf = "Download PDF"
     t_filename_csv = "results.csv"
     t_filename_pdf = "spec_sheet.pdf"
-    
-    # Chart Translations
-    t_chart_title = "Bottleneck Analysis (Slowest Operations)"
-    t_chart_x = "Time (Seconds)"
-    t_chart_y = "Operation"
-
 else:
     t_header = "CATALOGO DE TIEMPOS"
     t_label = "IDIOMA"
@@ -133,11 +126,6 @@ else:
     t_download_pdf = "Descargar PDF"
     t_filename_csv = "resultados.csv"
     t_filename_pdf = "hoja_especificaciones.pdf"
-    
-    # Chart Translations
-    t_chart_title = "Analisis de Cuello de Botella (Operaciones Mas Lentas)"
-    t_chart_x = "Tiempo (Segundos)"
-    t_chart_y = "Operacion"
 
 def format_language_option(option):
     if st.session_state.lang_choice == "Spanish":
@@ -170,7 +158,7 @@ with col_header_2:
 
 st.markdown("---")
 
-# --- 4. ORDERED FILTERING (STUBBORN MODE - NO RESET) ---
+# --- 4. ORDERED FILTERING (NO AUTO CLEANING) ---
 try:
     df, col_map = load_data(st.session_state.lang_choice)
     
@@ -192,57 +180,75 @@ try:
         if "op_key" in st.session_state: st.session_state.op_key = "All"
 
     # --- PERSISTENT OPTION BUILDER ---
-    def get_stubborn_options(df_source, col_name, widget_key):
-        valid_opts = sorted([x for x in df_source[col_name].unique() if x != ""])
-        opts = ["All"] + valid_opts
-        current_val = st.session_state.get(widget_key, "All")
+    # This function gets valid options, but FORCEFULLY adds the current selection
+    # back into the list if it's missing. This stops the "Reset".
+    def get_options_persistent(df_source, col_name, current_val_key):
+        # 1. Get naturally valid options
+        natural_opts = sorted([x for x in df_source[col_name].unique() if x != ""])
+        opts = ["All"] + natural_opts
+        
+        # 2. Check what is CURRENTLY selected in the session state
+        current_val = st.session_state.get(current_val_key, "All")
+        
+        # 3. If current selection exists and is NOT in the new list, add it back.
         if current_val != "All" and current_val not in opts:
             opts.append(current_val)
+            
         return opts
 
     with st.container():
         c1, c2, c3, c4, c_reset = st.columns([3, 3, 3, 3, 1])
 
-        # A. LEVEL 1: CATEGORY
+        # A. LEVEL 1: CATEGORY (Controls Garment)
         with c1:
+            # Category is top level, so it just gets all unique values
             cat_opts = ["All"] + sorted([x for x in df["CATEGORY"].unique() if x != ""])
             sel_cat = st.selectbox(lbl_cat, cat_opts, key="cat_key")
 
+        # FILTER 1
         if sel_cat != "All":
             df_lvl1 = df[df["CATEGORY"] == sel_cat]
         else:
             df_lvl1 = df
 
-        # B. LEVEL 2: GARMENT
-        garment_opts = get_stubborn_options(df_lvl1, "GARMENT", "garment_key")
+        # B. LEVEL 2: GARMENT (Controls Position)
+        # We use the PERSISTENT function so if you change Category, Garment stays put.
+        garment_opts = get_options_persistent(df_lvl1, "GARMENT", "garment_key")
+        
         with c2:
             sel_garment = st.selectbox(lbl_garment, garment_opts, key="garment_key")
 
+        # FILTER 2
         if sel_garment != "All":
             df_lvl2 = df_lvl1[df_lvl1["GARMENT"] == sel_garment]
         else:
             df_lvl2 = df_lvl1
 
-        # C. LEVEL 3: POSITION
-        pos_opts = get_stubborn_options(df_lvl2, "POSITION", "pos_key")
+        # C. LEVEL 3: POSITION (Controls Operation)
+        pos_opts = get_options_persistent(df_lvl2, "POSITION", "pos_key")
+
         with c3:
             sel_pos = st.selectbox(lbl_pos, pos_opts, key="pos_key")
 
+        # FILTER 3
         if sel_pos != "All":
             df_lvl3 = df_lvl2[df_lvl2["POSITION"] == sel_pos]
         else:
             df_lvl3 = df_lvl2
 
-        # D. LEVEL 4: OPERATION
-        op_opts = get_stubborn_options(df_lvl3, "OPERATION", "op_key")
+        # D. LEVEL 4: OPERATION (Final)
+        op_opts = get_options_persistent(df_lvl3, "OPERATION", "op_key")
+
         with c4:
             sel_op = st.selectbox(lbl_op, op_opts, key="op_key")
 
+        # FILTER 4 (Final DataFrame)
         if sel_op != "All":
             final_df = df_lvl3[df_lvl3["OPERATION"] == sel_op]
         else:
             final_df = df_lvl3
 
+        # E. RESET BUTTON
         with c_reset:
             st.write("") 
             st.write("") 
@@ -284,11 +290,10 @@ try:
             
         return pdf.output(dest='S').encode('latin-1')
 
-    # --- 6. RESULTS & BOTTLENECK CHART ---
+    # --- 6. DISPLAY RESULTS & DOWNLOADS ---
     st.divider()
     
     if not final_df.empty:
-        # A. TABLE DISPLAY
         display_df = final_df.rename(columns={
             "GARMENT": lbl_garment, "POSITION": lbl_pos, "OPERATION": lbl_op,
             "MACHINE": lbl_mach, "TIME": lbl_time, "CATEGORY": lbl_cat
@@ -300,31 +305,9 @@ try:
         st.dataframe(display_df, use_container_width=True, hide_index=True)
         st.caption(f"{t_results_msg}: {len(final_df)}")
 
-        # B. BOTTLENECK VISUALIZER (Altair)
-        st.markdown("### 📊 " + t_chart_title)
-        
-        # Prepare Data: Convert Time to Number safely
-        chart_df = final_df.copy()
-        chart_df["TIME_NUM"] = pd.to_numeric(chart_df["TIME"], errors='coerce').fillna(0)
-        
-        if not chart_df.empty and chart_df["TIME_NUM"].sum() > 0:
-            # Determine Color: If it's the Max value -> Red, else -> Blue
-            max_val = chart_df["TIME_NUM"].max()
-            chart_df["IsBottleneck"] = chart_df["TIME_NUM"] == max_val
-
-            c = alt.Chart(chart_df).mark_bar().encode(
-                x=alt.X('TIME_NUM', title=t_chart_x),
-                y=alt.Y('OPERATION', sort='-x', title=t_chart_y, axis=alt.Axis(labels=True)),
-                color=alt.Color('IsBottleneck', scale=alt.Scale(domain=[True, False], range=['#FF4B4B', '#3498DB']), legend=None),
-                tooltip=['OPERATION', 'TIME', 'MACHINE']
-            ).properties(height=300) 
-
-            st.altair_chart(c, use_container_width=True)
-        
-        st.divider()
-
-        # C. DOWNLOAD BUTTONS
+        # --- DOWNLOAD BUTTONS ---
         col_btns, col_spacer = st.columns([2, 10])
+        
         with col_btns:
             # 1. CSV
             csv = display_df.to_csv(index=False).encode('utf-8')
@@ -336,7 +319,7 @@ try:
                 use_container_width=True
             )
             
-            # 2. PDF
+            # 2. PDF (Stacked)
             pdf_bytes = create_pdf(display_df, cols_order)
             st.download_button(
                 label=f"📄 {t_download_pdf}",
