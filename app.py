@@ -280,7 +280,9 @@ try:
         st.caption(f"{t_results_msg}: {len(final_df)}")
 
         # --- DOWNLOAD BUTTONS ---
-        col_d1, col_d2, col_spacer = st.columns([1, 1, 4])
+        # This Ratio [2, 2, 15] forces the first two columns to be very narrow,
+        # which pulls the buttons close together.
+        col_d1, col_d2, col_spacer = st.columns([2, 2, 15])
         
         # 1. CSV
         csv = display_df.to_csv(index=False).encode('utf-8')
