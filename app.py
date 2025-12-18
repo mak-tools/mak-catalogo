@@ -158,7 +158,7 @@ with col_header_2:
 
 st.markdown("---")
 
-# --- 4. SMART FILTERING WITH AUTO-CORRECT ---
+# --- 4. SMART FILTERING (NO RESET LOGIC) ---
 try:
     df, col_map = load_data(st.session_state.lang_choice)
     
@@ -179,52 +179,37 @@ try:
         if "pos_key" in st.session_state: st.session_state.pos_key = "All"
         if "op_key" in st.session_state: st.session_state.op_key = "All"
 
-    # --- 1. GET CURRENT SELECTIONS ---
     sel_cat = st.session_state.get("cat_key", "All")
     sel_garment = st.session_state.get("garment_key", "All")
     sel_pos = st.session_state.get("pos_key", "All")
     sel_op = st.session_state.get("op_key", "All")
 
-    # --- 2. DEFINE MASKS (Who filters who?) ---
+    # --- MASKS ---
     m_cat = (df["CATEGORY"] == sel_cat) if sel_cat != "All" else pd.Series([True] * len(df))
     m_garment = (df["GARMENT"] == sel_garment) if sel_garment != "All" else pd.Series([True] * len(df))
     m_pos = (df["POSITION"] == sel_pos) if sel_pos != "All" else pd.Series([True] * len(df))
     m_op = (df["OPERATION"] == sel_op) if sel_op != "All" else pd.Series([True] * len(df))
 
-    # --- 3. CALCULATE VALID OPTIONS ---
-    def get_valid_options(df_filtered, col_name):
-        return ["All"] + sorted([x for x in df_filtered[col_name].unique() if x != ""])
+    # --- FORCE KEEP LOGIC ---
+    # This function calculates valid options BUT always includes the current selection
+    # to prevent the "Reset" behavior you disliked.
+    def get_smart_options(df_source, col_name, current_val):
+        # 1. Get valid options from data
+        valid_opts = sorted([x for x in df_source[col_name].unique() if x != ""])
+        
+        # 2. If the current user selection is missing (because of a conflict), ADD IT BACK.
+        # This keeps the dropdown stable even if the table shows "No Results".
+        if current_val != "All" and current_val not in valid_opts:
+            valid_opts.append(current_val)
+            
+        return ["All"] + sorted(valid_opts)
 
-    avail_cat = get_valid_options(df[m_garment & m_pos & m_op], "CATEGORY")
-    avail_garment = get_valid_options(df[m_cat & m_pos & m_op], "GARMENT")
-    avail_pos = get_valid_options(df[m_cat & m_garment & m_op], "POSITION")
-    avail_op = get_valid_options(df[m_cat & m_garment & m_pos], "OPERATION")
+    # Calculate Options (Intersection Logic)
+    avail_cat = get_smart_options(df[m_garment & m_pos & m_op], "CATEGORY", sel_cat)
+    avail_garment = get_smart_options(df[m_cat & m_pos & m_op], "GARMENT", sel_garment)
+    avail_pos = get_smart_options(df[m_cat & m_garment & m_op], "POSITION", sel_pos)
+    avail_op = get_smart_options(df[m_cat & m_garment & m_pos], "OPERATION", sel_op)
 
-    # --- 4. AUTO-CORRECT LOGIC (The Fix) ---
-    # If the user selected an option that is no longer valid, we RESET it to "All" immediately.
-    # We also update the 'mask' variable so the table displays correctly.
-
-    if sel_cat not in avail_cat:
-        st.session_state.cat_key = "All"
-        sel_cat = "All"
-        m_cat = pd.Series([True] * len(df)) # Reset mask
-
-    if sel_garment not in avail_garment:
-        st.session_state.garment_key = "All"
-        sel_garment = "All"
-        m_garment = pd.Series([True] * len(df)) # Reset mask
-
-    if sel_pos not in avail_pos:
-        st.session_state.pos_key = "All"
-        sel_pos = "All"
-        m_pos = pd.Series([True] * len(df)) # Reset mask
-
-    if sel_op not in avail_op:
-        st.session_state.op_key = "All"
-        sel_op = "All"
-        m_op = pd.Series([True] * len(df)) # Reset mask
-
-    # --- 5. RENDER WIDGETS ---
     with st.container():
         c1, c2, c3, c4, c_reset = st.columns([3, 3, 3, 3, 1])
 
@@ -241,11 +226,11 @@ try:
             st.write("") 
             st.button(t_clear_btn, on_click=reset_filters)
 
-    # --- 6. APPLY FINAL FILTER ---
+    # --- APPLY FINAL FILTER ---
     final_mask = m_cat & m_garment & m_pos & m_op
     final_df = df[final_mask]
 
-    # --- 7. PDF GENERATOR ---
+    # --- 5. PDF GENERATOR ---
     def create_pdf(dataframe, headers):
         pdf = FPDF(orientation='L', unit='mm', format='A4')
         pdf.add_page()
@@ -281,7 +266,7 @@ try:
             
         return pdf.output(dest='S').encode('latin-1')
 
-    # --- 8. DISPLAY RESULTS & DOWNLOADS ---
+    # --- 6. DISPLAY RESULTS & DOWNLOADS ---
     st.divider()
     
     if not final_df.empty:
@@ -319,6 +304,7 @@ try:
                 mime='application/pdf',
                 use_container_width=True
             )
+
     else:
         st.info(t_no_results)
 
