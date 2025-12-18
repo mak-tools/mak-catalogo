@@ -153,7 +153,7 @@ with col_header_2:
 
 st.markdown("---")
 
-# --- 4. INDEPENDENT FILTERING LOGIC ---
+# --- 4. SMART "ANY ORDER" FILTERING LOGIC ---
 try:
     # Load data
     df, col_map = load_data(st.session_state.lang_choice)
@@ -176,56 +176,69 @@ try:
         if "pos_key" in st.session_state: st.session_state.pos_key = "All"
         if "op_key" in st.session_state: st.session_state.op_key = "All"
 
-    # Helper: Gets options from the FULL dataframe (Independent)
-    def get_options(full_df, col_key):
-        return ["All"] + sorted([x for x in full_df[col_key].unique() if x != ""])
+    # --- CURRENT SELECTIONS ---
+    # We grab the current value from session state, default to "All"
+    sel_cat = st.session_state.get("cat_key", "All")
+    sel_garment = st.session_state.get("garment_key", "All")
+    sel_pos = st.session_state.get("pos_key", "All")
+    sel_op = st.session_state.get("op_key", "All")
 
+    # --- CALCULATE VALID OPTIONS (INTERSECTION) ---
+    # This logic allows you to start from any filter. 
+    # The available options for a dropdown are determined by the OTHER 3 dropdowns.
+    
+    # Base Masks
+    m_cat = (df["CATEGORY"] == sel_cat) if sel_cat != "All" else pd.Series([True] * len(df))
+    m_garment = (df["GARMENT"] == sel_garment) if sel_garment != "All" else pd.Series([True] * len(df))
+    m_pos = (df["POSITION"] == sel_pos) if sel_pos != "All" else pd.Series([True] * len(df))
+    m_op = (df["OPERATION"] == sel_op) if sel_op != "All" else pd.Series([True] * len(df))
+
+    # Helper to get valid options + ensure current selection is kept
+    def get_smart_options(df_source, col_name, current_val):
+        opts = ["All"] + sorted([x for x in df_source[col_name].unique() if x != ""])
+        # CRITICAL: If the current selection is NOT in the new list (because of filtering),
+        # we must add it back to prevent the "Streamlit Reset" bug.
+        if current_val != "All" and current_val not in opts:
+            opts.append(current_val)
+        return opts
+
+    # 1. Available Categories (Filtered by Garment + Pos + Op)
+    avail_cat = get_smart_options(df[m_garment & m_pos & m_op], "CATEGORY", sel_cat)
+
+    # 2. Available Garments (Filtered by Cat + Pos + Op)
+    avail_garment = get_smart_options(df[m_cat & m_pos & m_op], "GARMENT", sel_garment)
+
+    # 3. Available Positions (Filtered by Cat + Garment + Op)
+    avail_pos = get_smart_options(df[m_cat & m_garment & m_op], "POSITION", sel_pos)
+
+    # 4. Available Operations (Filtered by Cat + Garment + Pos)
+    avail_op = get_smart_options(df[m_cat & m_garment & m_pos], "OPERATION", sel_op)
+
+
+    # --- RENDER UI ---
     with st.container():
         c1, c2, c3, c4, c_reset = st.columns([3, 3, 3, 3, 1])
 
-        # 1. CATEGORY (Independent)
         with c1:
-            cat_opts = get_options(df, "CATEGORY")
-            sel_cat = st.selectbox(lbl_cat, cat_opts, key="cat_key")
+            st.selectbox(lbl_cat, avail_cat, key="cat_key")
 
-        # 2. GARMENT (Independent - uses 'df', not 'df_step1')
         with c2:
-            garment_opts = get_options(df, "GARMENT")
-            sel_garment = st.selectbox(lbl_garment, garment_opts, key="garment_key")
+            st.selectbox(lbl_garment, avail_garment, key="garment_key")
 
-        # 3. POSITION (Independent - uses 'df', not 'df_step2')
         with c3:
-            pos_opts = get_options(df, "POSITION")
-            sel_pos = st.selectbox(lbl_pos, pos_opts, key="pos_key")
+            st.selectbox(lbl_pos, avail_pos, key="pos_key")
 
-        # 4. OPERATION (Independent - uses 'df', not 'df_step3')
         with c4:
-            op_opts = get_options(df, "OPERATION")
-            sel_op = st.selectbox(lbl_op, op_opts, key="op_key")
+            st.selectbox(lbl_op, avail_op, key="op_key")
             
-        # 5. RESET BUTTON
         with c_reset:
             st.write("") 
             st.write("") 
             st.button(t_clear_btn, on_click=reset_filters)
 
-    # --- APPLY FILTERS (ALL AT ONCE) ---
-    # We start with the full list and narrow it down based on what is selected
-    mask = pd.Series([True] * len(df))
-
-    if sel_cat != "All":
-        mask = mask & (df["CATEGORY"] == sel_cat)
-    
-    if sel_garment != "All":
-        mask = mask & (df["GARMENT"] == sel_garment)
-
-    if sel_pos != "All":
-        mask = mask & (df["POSITION"] == sel_pos)
-
-    if sel_op != "All":
-        mask = mask & (df["OPERATION"] == sel_op)
-
-    final_df = df[mask]
+    # --- FINAL TABLE FILTER ---
+    final_mask = m_cat & m_garment & m_pos & m_op
+    final_df = df[final_mask]
 
     # --- 5. DISPLAY RESULTS ---
     st.divider()
