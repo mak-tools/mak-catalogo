@@ -3,7 +3,7 @@ import gspread
 from oauth2client.service_account import ServiceAccountCredentials
 import pandas as pd
 import os
-from fpdf import FPDF  # <--- NEW IMPORT FOR PDF
+from fpdf import FPDF
 
 # --- 1. CONFIGURATION ---
 st.set_page_config(page_title="MAK - CATALOGO", layout="wide")
@@ -224,27 +224,31 @@ try:
 
     # --- 5. PDF GENERATOR FUNCTION ---
     def create_pdf(dataframe, headers):
-        pdf = FPDF(orientation='L', unit='mm', format='A4') # Landscape
+        pdf = FPDF(orientation='L', unit='mm', format='A4')
         pdf.add_page()
         
-        # Title
+        # --- LOGO & HEADER SECTION ---
+        # 1. MAK LOGO (Top Left, Big)
+        pdf.set_font("Arial", "B", 24)
+        pdf.cell(0, 10, "MAK", ln=True, align="L")
+        
+        # 2. Header (Middle Center, smaller)
         pdf.set_font("Arial", "B", 16)
-        pdf.cell(0, 10, f"MAK - {t_header}", ln=True, align="C")
+        pdf.cell(0, 10, t_header, ln=True, align="C")
+        
+        # 3. Spacing
         pdf.ln(10)
 
-        # Headers
+        # --- TABLE ---
         pdf.set_font("Arial", "B", 10)
-        # Column Order: Garment, Position, Operation, Machine, Time, Category
         col_names = [headers[0], headers[1], headers[2], headers[3], headers[4], headers[5]]
-        widths = [45, 45, 90, 30, 25, 40] # Total approx 275mm (A4 landscape is 297mm)
+        widths = [45, 45, 90, 30, 25, 40]
         
         for i, h in enumerate(col_names):
-            # Encode to latin-1 to handle Spanish accents
             txt = str(h).encode('latin-1', 'replace').decode('latin-1')
             pdf.cell(widths[i], 10, txt, border=1, align='C', fill=False)
         pdf.ln()
 
-        # Rows
         pdf.set_font("Arial", "", 9)
         for _, row in dataframe.iterrows():
             data = [
@@ -252,20 +256,18 @@ try:
                 row[headers[3]], row[headers[4]], row[headers[5]]
             ]
             
-            # Draw Cells
             max_height = 10
             for i, d in enumerate(data):
                 txt = str(d).encode('latin-1', 'replace').decode('latin-1')
                 pdf.cell(widths[i], max_height, txt, border=1)
             pdf.ln()
             
-        return pdf.output(dest='S').encode('latin-1') # Return as bytes
+        return pdf.output(dest='S').encode('latin-1')
 
     # --- 6. DISPLAY RESULTS & DOWNLOADS ---
     st.divider()
     
     if not final_df.empty:
-        # Prepare Display DataFrame
         display_df = final_df.rename(columns={
             "GARMENT": lbl_garment, "POSITION": lbl_pos, "OPERATION": lbl_op,
             "MACHINE": lbl_mach, "TIME": lbl_time, "CATEGORY": lbl_cat
