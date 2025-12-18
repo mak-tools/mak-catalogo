@@ -88,7 +88,6 @@ def load_data(language):
     for row in data_rows:
         if len(row) > 6:
             item = {
-                # FORCE STRING to avoid type mismatch errors
                 "GARMENT": str(row[1]).strip(), 
                 "POSITION": str(row[2]).strip(), 
                 "OPERATION": str(row[3]).strip(),
@@ -159,7 +158,7 @@ with col_header_2:
 
 st.markdown("---")
 
-# --- 4. SMART FILTERING WITH FORCE-LOCK ---
+# --- 4. STABLE FILTERING LOGIC ---
 try:
     df, col_map = load_data(st.session_state.lang_choice)
     
@@ -180,64 +179,51 @@ try:
         if "pos_key" in st.session_state: st.session_state.pos_key = "All"
         if "op_key" in st.session_state: st.session_state.op_key = "All"
 
-    # --- 1. GET CURRENT STATE SAFELY ---
-    sel_cat = st.session_state.get("cat_key", "All")
-    sel_garment = st.session_state.get("garment_key", "All")
-    sel_pos = st.session_state.get("pos_key", "All")
-    sel_op = st.session_state.get("op_key", "All")
+    # --- 1. GET FULL STATIC LISTS ---
+    # We grab the options from the ENTIRE dataframe immediately.
+    # These lists NEVER change, so the dropdowns NEVER reset.
+    def get_static_options(df_source, col_name):
+        return ["All"] + sorted([x for x in df_source[col_name].unique() if x != ""])
 
-    # --- 2. DEFINE MASKS (Filter Logic) ---
-    # We use index matching to prevent shape mismatch errors
-    m_all = pd.Series(True, index=df.index)
+    all_cats = get_static_options(df, "CATEGORY")
+    all_garments = get_static_options(df, "GARMENT")
+    all_pos = get_static_options(df, "POSITION")
+    all_ops = get_static_options(df, "OPERATION")
 
-    m_cat = (df["CATEGORY"] == sel_cat) if sel_cat != "All" else m_all
-    m_garment = (df["GARMENT"] == sel_garment) if sel_garment != "All" else m_all
-    m_pos = (df["POSITION"] == sel_pos) if sel_pos != "All" else m_all
-    m_op = (df["OPERATION"] == sel_op) if sel_op != "All" else m_all
-
-    # --- 3. FORCE-LOCK OPTIONS CALCULATOR ---
-    # This is the "Magic" function that stops the resetting
-    def get_locked_options(df_filtered, col_name, current_selection):
-        # A. Get options that naturally exist in the data
-        natural_options = set(df_filtered[col_name].unique())
-        
-        # B. Clean up empty strings
-        if "" in natural_options: natural_options.remove("")
-        
-        # C. THE FIX: If the user's current selection is NOT in the new list,
-        #    we MANUALLY add it back. This prevents the "Index Error" / Reset.
-        if current_selection != "All":
-            natural_options.add(current_selection)
-        
-        return ["All"] + sorted(list(natural_options))
-
-    # --- 4. GENERATE DROPDOWN LISTS ---
-    avail_cat = get_locked_options(df[m_garment & m_pos & m_op], "CATEGORY", sel_cat)
-    avail_garment = get_locked_options(df[m_cat & m_pos & m_op], "GARMENT", sel_garment)
-    avail_pos = get_locked_options(df[m_cat & m_garment & m_op], "POSITION", sel_pos)
-    avail_op = get_locked_options(df[m_cat & m_garment & m_pos], "OPERATION", sel_op)
-
+    # --- 2. RENDER WIDGETS ---
     with st.container():
         c1, c2, c3, c4, c_reset = st.columns([3, 3, 3, 3, 1])
 
+        # We pass the STATIC lists here.
         with c1:
-            st.selectbox(lbl_cat, avail_cat, key="cat_key")
+            sel_cat = st.selectbox(lbl_cat, all_cats, key="cat_key")
         with c2:
-            st.selectbox(lbl_garment, avail_garment, key="garment_key")
+            sel_garment = st.selectbox(lbl_garment, all_garments, key="garment_key")
         with c3:
-            st.selectbox(lbl_pos, avail_pos, key="pos_key")
+            sel_pos = st.selectbox(lbl_pos, all_pos, key="pos_key")
         with c4:
-            st.selectbox(lbl_op, avail_op, key="op_key")
+            sel_op = st.selectbox(lbl_op, all_ops, key="op_key")
         with c_reset:
             st.write("") 
             st.write("") 
             st.button(t_clear_btn, on_click=reset_filters)
 
-    # --- 5. APPLY FINAL FILTER ---
-    final_mask = m_cat & m_garment & m_pos & m_op
-    final_df = df[final_mask]
+    # --- 3. APPLY FILTER (TABLE ONLY) ---
+    # The logic happens here. The dropdowns stay stable, but the table updates.
+    mask = pd.Series([True] * len(df))
 
-    # --- 6. PDF GENERATOR ---
+    if sel_cat != "All":
+        mask = mask & (df["CATEGORY"] == sel_cat)
+    if sel_garment != "All":
+        mask = mask & (df["GARMENT"] == sel_garment)
+    if sel_pos != "All":
+        mask = mask & (df["POSITION"] == sel_pos)
+    if sel_op != "All":
+        mask = mask & (df["OPERATION"] == sel_op)
+
+    final_df = df[mask]
+
+    # --- 5. PDF GENERATOR ---
     def create_pdf(dataframe, headers):
         pdf = FPDF(orientation='L', unit='mm', format='A4')
         pdf.add_page()
@@ -273,7 +259,7 @@ try:
             
         return pdf.output(dest='S').encode('latin-1')
 
-    # --- 7. DISPLAY RESULTS & DOWNLOADS ---
+    # --- 6. DISPLAY RESULTS & DOWNLOADS ---
     st.divider()
     
     if not final_df.empty:
